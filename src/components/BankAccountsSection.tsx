@@ -13,7 +13,8 @@ import {
   ArrowUpRight, 
   ArrowDownRight,
   TrendingUp,
-  CalendarCheck2
+  CalendarCheck2,
+  Edit3
 } from 'lucide-react';
 
 interface BankAccountsSectionProps {
@@ -52,13 +53,13 @@ export const BankAccountsSection: React.FC<BankAccountsSectionProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-            <span>Bank & Wallet Accounts</span>
+            <span>Bank &amp; Wallet Accounts</span>
             <span className="text-xs font-normal text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">
               {computedAccounts.length} Active
             </span>
           </h2>
           <p className="text-xs text-slate-400">
-            Track opening balances, monthly inflows, expenses, and live balance per account
+            Track and edit starting amounts, monthly inflows, expenses, and live balance per account
           </p>
         </div>
 
@@ -66,7 +67,7 @@ export const BankAccountsSection: React.FC<BankAccountsSectionProps> = ({
           {/* Quick configure month opening balance */}
           <button
             onClick={() => onOpenOpeningBalanceModal()}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 text-xs font-medium rounded-xl transition-colors shadow-sm"
+            className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 text-xs font-medium rounded-xl transition-colors shadow-sm cursor-pointer"
           >
             <CalendarCheck2 className="w-3.5 h-3.5" />
             <span>Set Month Opening Balances</span>
@@ -75,7 +76,7 @@ export const BankAccountsSection: React.FC<BankAccountsSectionProps> = ({
           {/* Add Account */}
           <button
             onClick={onAddAccount}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 text-slate-200 hover:text-white hover:bg-slate-700 border border-slate-700 text-xs font-medium rounded-xl transition-colors"
+            className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 text-slate-200 hover:text-white hover:bg-slate-700 border border-slate-700 text-xs font-medium rounded-xl transition-colors cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Account</span>
@@ -113,33 +114,45 @@ export const BankAccountsSection: React.FC<BankAccountsSectionProps> = ({
                   </div>
                 </div>
 
-                <button
-                  onClick={() => onEditAccount(account)}
-                  className="p-1 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors"
-                  title="Edit Account Details"
-                >
-                  <Settings2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center space-x-1">
+                  <button
+                    onClick={() => onEditAccount(account)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                    title="Edit Account details and Base Amount"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Balances Display */}
               <div className="mt-4 pt-3 border-t border-slate-800/80">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-xs text-slate-400 font-medium">Current Balance</span>
-                  <span className={`text-lg font-extrabold tracking-tight ${isNegative ? 'text-rose-400' : 'text-white'}`}>
-                    {formatCurrency(currentBalance, currency)}
-                  </span>
+                  <span className="text-xs text-slate-400 font-medium">Live Balance</span>
+                  <div className="flex items-center space-x-1.5">
+                    <span className={`text-lg font-extrabold tracking-tight ${isNegative ? 'text-rose-400' : 'text-white'}`}>
+                      {formatCurrency(currentBalance, currency)}
+                    </span>
+                    <button
+                      onClick={() => onEditAccount(account)}
+                      className="text-slate-500 hover:text-emerald-400 transition-colors"
+                      title="Edit base amount"
+                    >
+                      <Settings2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
-                {/* Opening Balance Badge */}
-                <div className="mt-2.5 flex items-center justify-between text-xs bg-slate-950/60 p-2 rounded-xl border border-slate-800/50">
+                {/* Opening Balance Badge (Clickable to edit this month's starting balance) */}
+                <div className="mt-2.5 flex items-center justify-between text-xs bg-slate-950/60 p-2 rounded-xl border border-slate-800/50 group/open">
                   <span className="text-slate-400">Month Opening:</span>
                   <button
                     onClick={() => onOpenOpeningBalanceModal(account.id)}
-                    className="font-semibold text-emerald-400 hover:text-emerald-300 hover:underline flex items-center space-x-1"
+                    className="font-semibold text-emerald-400 hover:text-emerald-300 hover:underline flex items-center space-x-1 cursor-pointer"
                     title="Click to edit opening balance for this month"
                   >
                     <span>{formatCurrency(openingBalance, currency)}</span>
+                    <Edit3 className="w-3 h-3 opacity-60 group-hover/open:opacity-100 ml-0.5" />
                   </button>
                 </div>
 

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Account, AccountType } from '@/types';
-import { X, Building2, Trash2, Check, Palette } from 'lucide-react';
+import { X, Building2, Trash2, Check, Palette, DollarSign } from 'lucide-react';
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -53,7 +53,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
       setName(editingAccount.name);
       setType(editingAccount.type);
       setColor(editingAccount.color || '#2563EB');
-      setInitialBalance(String(editingAccount.initial_balance || 0));
+      setInitialBalance(String(editingAccount.initial_balance ?? 0));
     } else {
       setName('');
       setType('Checking');
@@ -113,9 +113,9 @@ export const AccountModal: React.FC<AccountModalProps> = ({
             </div>
             <div>
               <h3 className="text-lg font-bold text-white">
-                {editingAccount ? 'Edit Bank Account' : 'Add New Bank Account'}
+                {editingAccount ? 'Edit Bank Account & Amount' : 'Add New Bank Account'}
               </h3>
-              <p className="text-xs text-slate-400">Manage account name, type & branding</p>
+              <p className="text-xs text-slate-400">Update account name, base amount & branding</p>
             </div>
           </div>
           <button
@@ -157,21 +157,24 @@ export const AccountModal: React.FC<AccountModalProps> = ({
             </select>
           </div>
 
-          {!editingAccount && (
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">
-                Base Initial Balance ({currency})
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={initialBalance}
-                onChange={(e) => setInitialBalance(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          )}
+          {/* Base / Initial Balance */}
+          <div>
+            <label className="flex items-center space-x-1 text-xs font-medium text-slate-400 mb-1">
+              <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Base / Initial Balance ({currency}) <span className="text-rose-400">*</span></span>
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              value={initialBalance}
+              onChange={(e) => setInitialBalance(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-base font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+            <p className="text-[11px] text-slate-500 mt-1">
+              The starting amount when this account was created or baseline balance.
+            </p>
+          </div>
 
           {/* Color Accent Picker */}
           <div>
@@ -220,7 +223,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                 className="flex items-center space-x-1.5 px-5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
               >
                 <Check className="w-4 h-4" />
-                <span>{editingAccount ? 'Update Account' : 'Create Account'}</span>
+                <span>{editingAccount ? 'Update Account & Amount' : 'Create Account'}</span>
               </button>
             </div>
           </div>
