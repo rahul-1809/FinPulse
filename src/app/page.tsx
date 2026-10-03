@@ -83,12 +83,18 @@ export default function Home() {
     setIsClient(true);
     dataStore.init();
     refreshData();
+
+    // Subscribe to all changes (local, cross-tab, or Supabase realtime)
+    const unsubscribe = dataStore.subscribe(() => {
+      refreshData();
+    });
+
+    return () => unsubscribe();
   }, [refreshData]);
 
   // Keyboard shortcut listener for rapid entry
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if typing in an input
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
         return;
       }
@@ -118,19 +124,16 @@ export default function Home() {
     } else {
       dataStore.addTransaction(txData);
     }
-    refreshData();
   };
 
   const handleDeleteTransaction = (id: string) => {
     dataStore.deleteTransaction(id);
-    refreshData();
   };
 
   const handleSaveOpeningBalances = (updates: Array<{ accountId: string; balance: number; notes?: string }>) => {
     updates.forEach((item) => {
       dataStore.setMonthlyOpeningBalance(item.accountId, currentMonth, item.balance, item.notes);
     });
-    refreshData();
   };
 
   const handleSaveAccount = (accData: Omit<Account, 'id'> | Account) => {
@@ -139,18 +142,15 @@ export default function Home() {
     } else {
       dataStore.addAccount(accData);
     }
-    refreshData();
   };
 
   const handleDeleteAccount = (id: string) => {
     dataStore.deleteAccount(id);
-    refreshData();
   };
 
   const handleManualSync = async () => {
     setIsSyncing(true);
     await dataStore.syncFromSupabase();
-    refreshData();
     setIsSyncing(false);
   };
 

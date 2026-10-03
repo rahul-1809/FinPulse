@@ -1,46 +1,65 @@
 import { Account, Category, MonthlyBalance, Transaction, AccountComputedBalance, MonthSummary } from '@/types';
 import { DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES, DEFAULT_MONTHLY_BALANCES, DEFAULT_TRANSACTIONS } from './constants';
 import { getSupabase } from './supabase';
+import { generateUUID } from './utils';
 
 const STORAGE_KEYS = {
-  ACCOUNTS: 'pe_accounts_v1',
-  MONTHLY_BALANCES: 'pe_monthly_balances_v1',
-  CATEGORIES: 'pe_categories_v1',
-  TRANSACTIONS: 'pe_transactions_v1',
-  ACTIVE_MONTH: 'pe_active_month_v1',
-  CURRENCY: 'pe_currency_v1',
+  ACCOUNTS: 'pe_accounts_v2',
+  MONTHLY_BALANCES: 'pe_monthly_balances_v2',
+  CATEGORIES: 'pe_categories_v2',
+  TRANSACTIONS: 'pe_transactions_v2',
 };
 
-// --- In-Memory & LocalStorage Cache ---
+type Listener = () => void;
+
 class DataStore {
   private accounts: Account[] = [];
   private monthlyBalances: MonthlyBalance[] = [];
   private categories: Category[] = [];
   private transactions: Transaction[] = [];
   private initialized = false;
+  private listeners: Set<Listener> = new Set();
+  private broadcastChannel: BroadcastChannel | null = null;
+  private realtimeSubscribed = false;
+
+  public subscribe(listener: Listener): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notifySubscribers() {
+    this.listeners.forEach((l) => {
+      try {
+        l();
+      } catch (e) {
+        console.error('Subscriber notification error:', e);
+      }
+    });
+  }
 
   public init() {
     if (typeof window === 'undefined') return;
     if (this.initialized) return;
 
     try {
-      const storedAcc = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
-      this.accounts = storedAcc ? JSON.parse(storedAcc) : DEFAULT_ACCOUNTS;
+      // Setup cross-tab BroadcastChannel
+      if (typeof BroadcastChannel !== 'undefined') {
+        this.broadcastChannel = new BroadcastChannel('finpulse_tab_sync');
+        this.broadcastChannel.onmessage = (event) => {
+          if (event.data === 'sync_required') {
+            this.syncFromLocal();
+            this.notifySubscribers();
+          }
+        };
+      }
 
-      const storedMb = localStorage.getItem(STORAGE_KEYS.MONTHLY_BALANCES);
-      this.monthlyBalances = storedMb ? JSON.parse(storedMb) : DEFAULT_MONTHLY_BALANCES;
-
-      const storedCat = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
-      this.categories = storedCat ? JSON.parse(storedCat) : DEFAULT_CATEGORIES;
-
-      const storedTx = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
-      this.transactions = storedTx ? JSON.parse(storedTx) : DEFAULT_TRANSACTIONS;
-
-      this.saveLocal();
+      // 1. Initial quick load from LocalStorage
+      this.syncFromLocal();
       this.initialized = true;
 
-      // Asynchronously attempt to sync from Supabase if connected
+      // 2. Fetch from Supabase and listen for Realtime events
       this.syncFromSupabase();
+      this.setupSupabaseRealtime();
     } catch (e) {
       console.error('Error initializing DataStore:', e);
       this.accounts = DEFAULT_ACCOUNTS;
@@ -50,6 +69,21 @@ class DataStore {
     }
   }
 
+  private syncFromLocal() {
+    if (typeof window === 'undefined') return;
+    const storedAcc = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
+    this.accounts = storedAcc ? JSON.parse(storedAcc) : DEFAULT_ACCOUNTS;
+
+    const storedMb = localStorage.getItem(STORAGE_KEYS.MONTHLY_BALANCES);
+    this.monthlyBalances = storedMb ? JSON.parse(storedMb) : DEFAULT_MONTHLY_BALANCES;
+
+    const storedCat = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+    this.categories = storedCat ? JSON.parse(storedCat) : DEFAULT_CATEGORIES;
+
+    const storedTx = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
+    this.transactions = storedTx ? JSON.parse(storedTx) : DEFAULT_TRANSACTIONS;
+  }
+
   private saveLocal() {
     if (typeof window === 'undefined') return;
     try {
@@ -57,12 +91,35 @@ class DataStore {
       localStorage.setItem(STORAGE_KEYS.MONTHLY_BALANCES, JSON.stringify(this.monthlyBalances));
       localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(this.categories));
       localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(this.transactions));
+      
+      // Notify other tabs
+      if (this.broadcastChannel) {
+        this.broadcastChannel.postMessage('sync_required');
+      }
     } catch (e) {
       console.warn('LocalStorage save failed:', e);
     }
   }
 
-  // --- SUPABASE SYNC ---
+  // --- SUPABASE REALTIME & SYNC ---
+  private setupSupabaseRealtime() {
+    if (this.realtimeSubscribed) return;
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    try {
+      supabase
+        .channel('finpulse_db_changes')
+        .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+          this.syncFromSupabase();
+        })
+        .subscribe();
+      this.realtimeSubscribed = true;
+    } catch (err) {
+      console.warn('Supabase realtime setup failed:', err);
+    }
+  }
+
   public async syncFromSupabase(): Promise<boolean> {
     const supabase = getSupabase();
     if (!supabase) return false;
@@ -75,40 +132,51 @@ class DataStore {
         supabase.from('transactions').select('*').order('date', { ascending: false }),
       ]);
 
+      let hasSupabaseData = false;
+
       if (accRes.data && accRes.data.length > 0) {
         this.accounts = accRes.data;
+        hasSupabaseData = true;
       }
       if (mbRes.data && mbRes.data.length > 0) {
         this.monthlyBalances = mbRes.data;
+        hasSupabaseData = true;
       }
       if (catRes.data && catRes.data.length > 0) {
         this.categories = catRes.data;
       }
       if (txRes.data && txRes.data.length > 0) {
         this.transactions = txRes.data;
+        hasSupabaseData = true;
       }
 
-      this.saveLocal();
+      // If Supabase database is empty, auto-push initial defaults to cloud
+      if (!hasSupabaseData && accRes.data?.length === 0) {
+        await this.pushLocalToSupabase();
+      } else {
+        this.saveLocal();
+        this.notifySubscribers();
+      }
+
       return true;
     } catch (err) {
-      console.error('Supabase fetch failed:', err);
+      console.error('Supabase sync error:', err);
       return false;
     }
   }
 
-  // Push all local data into Supabase
   public async pushLocalToSupabase(): Promise<{ success: boolean; message: string }> {
     const supabase = getSupabase();
     if (!supabase) {
-      return { success: false, message: 'Supabase credentials not set or invalid.' };
+      return { success: false, message: 'Supabase credentials not configured.' };
     }
 
     try {
-      if (this.accounts.length > 0) {
-        await supabase.from('accounts').upsert(this.accounts);
-      }
       if (this.categories.length > 0) {
         await supabase.from('categories').upsert(this.categories);
+      }
+      if (this.accounts.length > 0) {
+        await supabase.from('accounts').upsert(this.accounts);
       }
       if (this.monthlyBalances.length > 0) {
         await supabase.from('monthly_balances').upsert(this.monthlyBalances);
@@ -116,9 +184,10 @@ class DataStore {
       if (this.transactions.length > 0) {
         await supabase.from('transactions').upsert(this.transactions);
       }
-      return { success: true, message: 'Local data synced with Supabase successfully!' };
+      return { success: true, message: 'Synced with Supabase successfully!' };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      console.error('Supabase push error:', msg);
       return { success: false, message: `Sync error: ${msg}` };
     }
   }
@@ -149,15 +218,19 @@ class DataStore {
     this.init();
     const newAccount: Account = {
       ...account,
-      id: 'acc-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+      id: generateUUID(),
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
     this.accounts.push(newAccount);
     this.saveLocal();
+    this.notifySubscribers();
 
     const supabase = getSupabase();
     if (supabase) {
-      supabase.from('accounts').insert([newAccount]).then();
+      supabase.from('accounts').insert([newAccount]).then(({ error }) => {
+        if (error) console.error('Supabase insert account error:', error);
+      });
     }
     return newAccount;
   }
@@ -169,10 +242,13 @@ class DataStore {
 
     this.accounts[idx] = { ...this.accounts[idx], ...updates, updated_at: new Date().toISOString() };
     this.saveLocal();
+    this.notifySubscribers();
 
     const supabase = getSupabase();
     if (supabase) {
-      supabase.from('accounts').update(updates).eq('id', id).then();
+      supabase.from('accounts').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase update account error:', error);
+      });
     }
     return this.accounts[idx];
   }
@@ -183,10 +259,13 @@ class DataStore {
     this.monthlyBalances = this.monthlyBalances.filter((mb) => mb.account_id !== id);
     this.transactions = this.transactions.filter((tx) => tx.account_id !== id && tx.to_account_id !== id);
     this.saveLocal();
+    this.notifySubscribers();
 
     const supabase = getSupabase();
     if (supabase) {
-      supabase.from('accounts').delete().eq('id', id).then();
+      supabase.from('accounts').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase delete account error:', error);
+      });
     }
     return true;
   }
@@ -206,7 +285,7 @@ class DataStore {
       result = this.monthlyBalances[existingIdx];
     } else {
       result = {
-        id: 'mb-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+        id: generateUUID(),
         account_id: accountId,
         month,
         opening_balance: balance,
@@ -216,29 +295,15 @@ class DataStore {
       this.monthlyBalances.push(result);
     }
     this.saveLocal();
+    this.notifySubscribers();
 
     const supabase = getSupabase();
     if (supabase) {
-      supabase.from('monthly_balances').upsert([result]).then();
+      supabase.from('monthly_balances').upsert([result]).then(({ error }) => {
+        if (error) console.error('Supabase upsert monthly balance error:', error);
+      });
     }
     return result;
-  }
-
-  // --- CATEGORY MUTATIONS ---
-  public addCategory(cat: Omit<Category, 'id'>): Category {
-    this.init();
-    const newCat: Category = {
-      ...cat,
-      id: 'cat-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
-    };
-    this.categories.push(newCat);
-    this.saveLocal();
-
-    const supabase = getSupabase();
-    if (supabase) {
-      supabase.from('categories').insert([newCat]).then();
-    }
-    return newCat;
   }
 
   // --- TRANSACTIONS MUTATIONS ---
@@ -246,16 +311,19 @@ class DataStore {
     this.init();
     const newTx: Transaction = {
       ...tx,
-      id: 'tx-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+      id: generateUUID(),
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
-    // Insert at beginning for chronological order
     this.transactions.unshift(newTx);
     this.saveLocal();
+    this.notifySubscribers();
 
     const supabase = getSupabase();
     if (supabase) {
-      supabase.from('transactions').insert([newTx]).then();
+      supabase.from('transactions').insert([newTx]).then(({ error }) => {
+        if (error) console.error('Supabase insert transaction error:', error);
+      });
     }
     return newTx;
   }
@@ -267,10 +335,13 @@ class DataStore {
 
     this.transactions[idx] = { ...this.transactions[idx], ...updates, updated_at: new Date().toISOString() };
     this.saveLocal();
+    this.notifySubscribers();
 
     const supabase = getSupabase();
     if (supabase) {
-      supabase.from('transactions').update(updates).eq('id', id).then();
+      supabase.from('transactions').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase update transaction error:', error);
+      });
     }
     return this.transactions[idx];
   }
@@ -279,10 +350,13 @@ class DataStore {
     this.init();
     this.transactions = this.transactions.filter((t) => t.id !== id);
     this.saveLocal();
+    this.notifySubscribers();
 
     const supabase = getSupabase();
     if (supabase) {
-      supabase.from('transactions').delete().eq('id', id).then();
+      supabase.from('transactions').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase delete transaction error:', error);
+      });
     }
     return true;
   }
@@ -291,15 +365,12 @@ class DataStore {
   public computeAccountBalances(month: string): AccountComputedBalance[] {
     this.init();
     return this.accounts.map((acc) => {
-      // 1. Determine opening balance for the month
       const configuredMb = this.monthlyBalances.find((mb) => mb.account_id === acc.id && mb.month === month);
       
       let openingBalance: number;
       if (configuredMb !== undefined) {
         openingBalance = Number(configuredMb.opening_balance);
       } else {
-        // Compute previous months' roll-over or fallback to initial_balance
-        // All transactions strictly before this month (date < month + '-01')
         const prevTx = this.transactions.filter(
           (t) => t.date < `${month}-01` && (t.account_id === acc.id || t.to_account_id === acc.id)
         );
@@ -316,7 +387,6 @@ class DataStore {
         openingBalance = balance;
       }
 
-      // 2. Selected month transactions
       const monthTx = this.transactions.filter(
         (t) => t.date.startsWith(month) && (t.account_id === acc.id || t.to_account_id === acc.id)
       );
@@ -340,7 +410,6 @@ class DataStore {
 
       const monthClosingBalance = openingBalance + totalIncome - totalExpense + transfersIn - transfersOut;
 
-      // 3. All-time live balance
       const allTx = this.transactions.filter((t) => t.account_id === acc.id || t.to_account_id === acc.id);
       let currentBalance = Number(acc.initial_balance || 0);
       for (const tx of allTx) {
@@ -368,12 +437,9 @@ class DataStore {
 
   public computeMonthSummary(month: string): MonthSummary {
     const computedAccounts = this.computeAccountBalances(month);
-    
-    // Total live net worth / liquid balance (excluding liability accounts if negative)
     const totalLiquidBalance = computedAccounts.reduce((sum, item) => sum + item.currentBalance, 0);
     const monthOpeningTotal = computedAccounts.reduce((sum, item) => sum + item.openingBalance, 0);
 
-    // Sum transactions in this month
     const monthTx = this.transactions.filter((t) => t.date.startsWith(month));
     let monthInflow = 0;
     let monthOutflow = 0;
@@ -425,6 +491,8 @@ class DataStore {
       if (Array.isArray(data.categories)) this.categories = data.categories;
       if (Array.isArray(data.transactions)) this.transactions = data.transactions;
       this.saveLocal();
+      this.pushLocalToSupabase();
+      this.notifySubscribers();
       return { success: true, message: 'Data imported successfully!' };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -461,6 +529,8 @@ class DataStore {
     this.categories = DEFAULT_CATEGORIES;
     this.transactions = DEFAULT_TRANSACTIONS;
     this.saveLocal();
+    this.pushLocalToSupabase();
+    this.notifySubscribers();
   }
 }
 
