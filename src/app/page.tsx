@@ -13,6 +13,7 @@ import {
 import { dataStore } from '@/lib/storage';
 import { getCurrentMonthString } from '@/lib/utils';
 import { Header } from '@/components/Header';
+import { QuickActionBar } from '@/components/QuickActionBar';
 import { SummaryCards } from '@/components/SummaryCards';
 import { BankAccountsSection } from '@/components/BankAccountsSection';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
@@ -118,6 +119,12 @@ export default function Home() {
   }, []);
 
   // --- Handlers ---
+  const handleOpenAddModal = (type: TransactionType) => {
+    setTxModalType(type);
+    setEditingTx(null);
+    setIsTxModalOpen(true);
+  };
+
   const handleSaveTransaction = (txData: Omit<Transaction, 'id'> | Transaction) => {
     if ('id' in txData) {
       dataStore.updateTransaction(txData.id, txData);
@@ -165,8 +172,10 @@ export default function Home() {
     );
   }
 
+  const monthTxCount = transactions.filter((t) => t.date.startsWith(currentMonth)).length;
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased">
       {/* Top Navbar */}
       <Header
         currentMonth={currentMonth}
@@ -180,8 +189,15 @@ export default function Home() {
       />
 
       {/* Main Content Dashboard */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-7">
-        {/* 1. Month Summary Metrics */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 sm:space-y-8">
+        {/* 1. Handy Top Quick Action Bar */}
+        <QuickActionBar
+          transactionCount={monthTxCount}
+          currentMonth={currentMonth}
+          onOpenAddModal={handleOpenAddModal}
+        />
+
+        {/* 2. Month Summary Overview Cards */}
         <SummaryCards
           summary={summary}
           currency={currency}
@@ -191,7 +207,7 @@ export default function Home() {
           }}
         />
 
-        {/* 2. Bank Accounts & Starting Balance Overview */}
+        {/* 3. Bank Accounts & Starting Balance Section */}
         <BankAccountsSection
           computedAccounts={computedAccounts}
           currency={currency}
@@ -210,7 +226,7 @@ export default function Home() {
           }}
         />
 
-        {/* 3. Visual Charts & Analytics */}
+        {/* 4. Visual Charts & Analytics */}
         <AnalyticsCharts
           transactions={transactions}
           categories={categories}
@@ -219,18 +235,14 @@ export default function Home() {
           summary={summary}
         />
 
-        {/* 4. Transactions Ledger & Quick Actions */}
+        {/* 5. Transactions Ledger & Filters */}
         <TransactionList
           transactions={transactions}
           accounts={accounts}
           categories={categories}
           currentMonth={currentMonth}
           currency={currency}
-          onOpenAddModal={(t) => {
-            setTxModalType(t);
-            setEditingTx(null);
-            setIsTxModalOpen(true);
-          }}
+          onOpenAddModal={handleOpenAddModal}
           onEditTransaction={(tx) => {
             setEditingTx(tx);
             setIsTxModalOpen(true);
@@ -294,7 +306,7 @@ export default function Home() {
       />
 
       {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950/60 py-4 text-center text-xs text-slate-500">
+      <footer className="border-t border-slate-900 bg-slate-950/80 py-4 text-center text-xs text-slate-500 mt-8">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>FinPulse Ledger • Lag-Free Inflow &amp; Expense Tracking</div>
           <div className="flex items-center space-x-3 text-slate-400">

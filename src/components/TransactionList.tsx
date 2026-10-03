@@ -5,18 +5,16 @@ import { Account, Category, Transaction, TransactionType } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { 
   Search, 
-  Filter, 
   ArrowDownLeft, 
   ArrowUpRight, 
   ArrowRightLeft, 
   Trash2, 
   Edit3, 
   Download, 
-  Plus, 
   ReceiptText,
-  CreditCard,
   Building2,
-  Tag
+  Calendar,
+  Filter
 } from 'lucide-react';
 
 interface TransactionListProps {
@@ -86,71 +84,28 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   }, [transactions, currentMonth, typeFilter, accountFilter, categoryFilter, searchQuery, accMap, catMap]);
 
   return (
-    <section className="space-y-4">
-      {/* Top Banner with Quick Logging Action Buttons */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 shadow-md">
-        <div>
-          <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-            <ReceiptText className="w-5 h-5 text-emerald-400" />
-            <span>Monthly Ledger & Spends</span>
-          </h2>
-          <p className="text-xs text-slate-400">
-            {filteredList.length} transactions recorded for this month
-          </p>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex items-center flex-wrap gap-2">
-          {/* Quick Expense */}
-          <button
-            onClick={() => onOpenAddModal('EXPENSE')}
-            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 shadow-md shadow-rose-600/20 transition-all cursor-pointer"
-          >
-            <ArrowDownLeft className="w-4 h-4" />
-            <span>+ Expense</span>
-          </button>
-
-          {/* Quick Income */}
-          <button
-            onClick={() => onOpenAddModal('INCOME')}
-            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
-          >
-            <ArrowUpRight className="w-4 h-4" />
-            <span>+ Income (Credit)</span>
-          </button>
-
-          {/* Transfer */}
-          <button
-            onClick={() => onOpenAddModal('TRANSFER')}
-            className="flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-all cursor-pointer"
-          >
-            <ArrowRightLeft className="w-4 h-4 text-blue-400" />
-            <span>Transfer</span>
-          </button>
-        </div>
-      </div>
-
+    <section className="space-y-3.5">
       {/* Filters Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-900 p-3 rounded-2xl border border-slate-800">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-slate-900/90 p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-slate-800 shadow-lg">
         {/* Search */}
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Search notes, accounts, categories..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3.5 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
           />
         </div>
 
-        {/* Dropdowns */}
+        {/* Filter Dropdowns & Export Button */}
         <div className="flex items-center space-x-2 flex-wrap gap-y-2">
           {/* Type Filter */}
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value as 'ALL' | TransactionType)}
-            className="bg-slate-950 text-xs font-medium text-slate-300 border border-slate-800 rounded-xl px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+            className="bg-slate-950 text-xs sm:text-sm font-medium text-slate-300 border border-slate-800 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
           >
             <option value="ALL">All Types</option>
             <option value="EXPENSE">Expenses Only</option>
@@ -162,7 +117,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
           <select
             value={accountFilter}
             onChange={(e) => setAccountFilter(e.target.value)}
-            className="bg-slate-950 text-xs font-medium text-slate-300 border border-slate-800 rounded-xl px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer max-w-[140px] truncate"
+            className="bg-slate-950 text-xs sm:text-sm font-medium text-slate-300 border border-slate-800 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer max-w-[150px] truncate"
           >
             <option value="ALL">All Accounts</option>
             {accounts.map((acc) => (
@@ -172,26 +127,40 @@ export const TransactionList: React.FC<TransactionListProps> = ({
             ))}
           </select>
 
+          {/* Category Filter */}
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="bg-slate-950 text-xs sm:text-sm font-medium text-slate-300 border border-slate-800 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer max-w-[150px] truncate"
+          >
+            <option value="ALL">All Categories</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name} ({cat.type === 'INCOME' ? 'Income' : 'Expense'})
+              </option>
+            ))}
+          </select>
+
           {/* Export CSV Button */}
           <button
             onClick={onExportCSV}
-            className="flex items-center space-x-1.5 px-3 py-2 bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700 text-xs font-medium rounded-xl transition-colors cursor-pointer"
+            className="flex items-center space-x-1.5 px-3.5 py-2.5 bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-750 border border-slate-700 text-xs sm:text-sm font-medium rounded-xl transition-all cursor-pointer shadow-sm active:scale-95"
             title="Download CSV for this month"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-4 h-4" />
             <span className="hidden sm:inline">Export CSV</span>
           </button>
         </div>
       </div>
 
-      {/* Transaction List Cards / Table */}
-      <div className="rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden shadow-lg">
+      {/* Transaction List Entries */}
+      <div className="rounded-2xl sm:rounded-3xl bg-slate-900 border border-slate-800 overflow-hidden shadow-xl">
         {filteredList.length === 0 ? (
           <div className="py-16 text-center text-slate-500">
-            <ReceiptText className="w-10 h-10 mx-auto text-slate-600 mb-2 opacity-60" />
-            <p className="text-sm font-medium text-slate-400">No transactions found</p>
-            <p className="text-xs text-slate-500 mt-1">
-              Click &quot;+ Expense&quot; or &quot;+ Income&quot; to log your first transaction.
+            <ReceiptText className="w-12 h-12 mx-auto text-slate-600 mb-3 opacity-60" />
+            <p className="text-sm sm:text-base font-semibold text-slate-400">No transactions recorded</p>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              Click &quot;+ Expense&quot; or &quot;+ Income&quot; at the top to record your first transaction.
             </p>
           </div>
         ) : (
@@ -208,12 +177,12 @@ export const TransactionList: React.FC<TransactionListProps> = ({
               return (
                 <div
                   key={tx.id}
-                  className="p-4 hover:bg-slate-850/80 transition-colors flex items-center justify-between gap-3 group"
+                  className="p-3.5 sm:p-4 hover:bg-slate-850/90 transition-all flex items-center justify-between gap-3 group"
                 >
                   {/* Left: Icon & Details */}
-                  <div className="flex items-center space-x-3.5 min-w-0">
+                  <div className="flex items-center space-x-3 sm:space-x-3.5 min-w-0">
                     <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${
+                      className={`w-10 h-10 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm ${
                         isIncome
                           ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                           : isExpense
@@ -228,21 +197,21 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
                     <div className="min-w-0">
                       <div className="flex items-center space-x-2 flex-wrap">
-                        <span className="text-sm font-bold text-white truncate">
+                        <span className="text-xs sm:text-sm font-bold text-white truncate">
                           {tx.note || (cat ? cat.name : isTransfer ? 'Account Transfer' : 'General')}
                         </span>
                         {cat && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                          <span className="text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full font-medium bg-slate-800 text-slate-300 border border-slate-700/80">
                             {cat.name}
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center space-x-2 text-xs text-slate-400 mt-1 flex-wrap">
+                      <div className="flex items-center space-x-2 text-[11px] sm:text-xs text-slate-400 mt-1 flex-wrap">
                         <span>{tx.date}</span>
                         <span>•</span>
                         <span className="flex items-center space-x-1 text-slate-300">
-                          <Building2 className="w-3 h-3 text-slate-500" />
+                          <Building2 className="w-3 h-3 text-slate-500 flex-shrink-0" />
                           <span>{fromAcc?.name || 'Account'}</span>
                           {isTransfer && toAcc && (
                             <>
@@ -262,10 +231,10 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                   </div>
 
                   {/* Right: Amount & Actions */}
-                  <div className="flex items-center space-x-4 flex-shrink-0">
+                  <div className="flex items-center space-x-3 sm:space-x-4 flex-shrink-0">
                     <div className="text-right">
                       <div
-                        className={`text-base font-extrabold tracking-tight ${
+                        className={`text-sm sm:text-base font-black tracking-tight ${
                           isIncome
                             ? 'text-emerald-400'
                             : isExpense
@@ -282,11 +251,11 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                       </div>
                     </div>
 
-                    {/* Action buttons on hover */}
-                    <div className="flex items-center space-x-1 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                    {/* Action buttons */}
+                    <div className="flex items-center space-x-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => onEditTransaction(tx)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
                         title="Edit entry"
                       >
                         <Edit3 className="w-4 h-4" />
@@ -297,7 +266,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                             onDeleteTransaction(tx.id);
                           }
                         }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition-colors"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
                         title="Delete entry"
                       >
                         <Trash2 className="w-4 h-4" />
