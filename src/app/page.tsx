@@ -16,6 +16,7 @@ import { Header } from '@/components/Header';
 import { QuickActionBar } from '@/components/QuickActionBar';
 import { SummaryCards } from '@/components/SummaryCards';
 import { BankAccountsSection } from '@/components/BankAccountsSection';
+import { SmartInsightsBanner } from '@/components/SmartInsightsBanner';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
 import { TransactionList } from '@/components/TransactionList';
 import { TransactionModal } from '@/components/TransactionModal';
@@ -23,6 +24,7 @@ import { OpeningBalanceModal } from '@/components/OpeningBalanceModal';
 import { AccountModal } from '@/components/AccountModal';
 import { SupabaseConfigModal } from '@/components/SupabaseConfigModal';
 import { ExportModal } from '@/components/ExportModal';
+import { DownloadReportModal } from '@/components/DownloadReportModal';
 
 export default function Home() {
   const [isClient, setIsClient] = useState(false);
@@ -59,6 +61,7 @@ export default function Home() {
 
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isDownloadReportModalOpen, setIsDownloadReportModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
   // Refresh all data from memory store
@@ -207,7 +210,15 @@ export default function Home() {
           }}
         />
 
-        {/* 3. Bank Accounts & Starting Balance Section */}
+        {/* 3. UPI-Style Smart Spending Insights Banner */}
+        <SmartInsightsBanner
+          transactions={transactions}
+          categories={categories}
+          currentMonth={currentMonth}
+          currency={currency}
+        />
+
+        {/* 4. Bank Accounts & Starting Balance Section */}
         <BankAccountsSection
           computedAccounts={computedAccounts}
           currency={currency}
@@ -226,16 +237,17 @@ export default function Home() {
           }}
         />
 
-        {/* 4. Visual Charts & Analytics */}
+        {/* 5. Visual Charts & Analytics */}
         <AnalyticsCharts
           transactions={transactions}
           categories={categories}
           currentMonth={currentMonth}
           currency={currency}
           summary={summary}
+          onOpenDownloadReport={() => setIsDownloadReportModalOpen(true)}
         />
 
-        {/* 5. Transactions Ledger & Filters */}
+        {/* 6. Transactions Ledger & Filters */}
         <TransactionList
           transactions={transactions}
           accounts={accounts}
@@ -248,15 +260,7 @@ export default function Home() {
             setIsTxModalOpen(true);
           }}
           onDeleteTransaction={handleDeleteTransaction}
-          onExportCSV={() => {
-            const csv = dataStore.exportTransactionsCSV(currentMonth);
-            const a = document.createElement('a');
-            const file = new Blob([csv], { type: 'text/csv' });
-            a.href = URL.createObjectURL(file);
-            a.download = `transactions-${currentMonth}.csv`;
-            a.click();
-            URL.revokeObjectURL(a.href);
-          }}
+          onExportCSV={() => setIsDownloadReportModalOpen(true)}
         />
       </main>
 
@@ -303,6 +307,16 @@ export default function Home() {
         onClose={() => setIsExportModalOpen(false)}
         currentMonth={currentMonth}
         onDataImported={refreshData}
+      />
+
+      <DownloadReportModal
+        isOpen={isDownloadReportModalOpen}
+        onClose={() => setIsDownloadReportModalOpen(false)}
+        transactions={transactions}
+        categories={categories}
+        accounts={accounts}
+        currentMonth={currentMonth}
+        currency={currency}
       />
 
       {/* Footer */}
