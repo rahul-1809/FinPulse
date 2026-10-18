@@ -1,9 +1,10 @@
 'use client';
 
 import React from 'react';
-import { ChevronLeft, ChevronRight, Database, Download, Sparkles, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Database, Download, Sparkles, RefreshCw, User as UserIcon, LogOut, LogIn } from 'lucide-react';
 import { formatMonthName } from '@/lib/utils';
 import { getSupabaseCredentials } from '@/lib/supabase';
+import { User } from '@supabase/supabase-js';
 
 interface HeaderProps {
   currentMonth: string;
@@ -14,6 +15,9 @@ interface HeaderProps {
   onOpenExportModal: () => void;
   isSyncing?: boolean;
   onManualSync?: () => void;
+  user?: User | null;
+  onOpenAuthModal?: () => void;
+  onSignOut?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -25,6 +29,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenExportModal,
   isSyncing,
   onManualSync,
+  user,
+  onOpenAuthModal,
+  onSignOut,
 }) => {
   const { url } = getSupabaseCredentials();
   const isSupabaseConnected = Boolean(url);
@@ -158,6 +165,43 @@ export const Header: React.FC<HeaderProps> = ({
             <Download className="w-3.5 h-3.5" />
             <span className="hidden lg:inline">Backup</span>
           </button>
+
+          {/* User Auth Section */}
+          {user ? (
+            <div className="flex items-center space-x-1 sm:space-x-2 pl-1 border-l border-slate-800">
+              <div 
+                className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-slate-900 border border-slate-700 text-slate-200"
+                title={`Signed in as ${user.email}`}
+              >
+                <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold text-[10px]">
+                  {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <span className="max-w-[100px] truncate hidden sm:inline text-[11px] font-medium text-slate-300">
+                  {user.email?.split('@')[0]}
+                </span>
+              </div>
+              {onSignOut && (
+                <button
+                  onClick={onSignOut}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          ) : (
+            onOpenAuthModal && (
+              <button
+                onClick={onOpenAuthModal}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
+                title="Sign In / Register"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Sign In</span>
+              </button>
+            )
+          )}
         </div>
       </div>
     </header>

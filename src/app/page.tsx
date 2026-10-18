@@ -25,6 +25,10 @@ import { AccountModal } from '@/components/AccountModal';
 import { SupabaseConfigModal } from '@/components/SupabaseConfigModal';
 import { ExportModal } from '@/components/ExportModal';
 import { DownloadReportModal } from '@/components/DownloadReportModal';
+import { AuthModal } from '@/components/AuthModal';
+import { authService } from '@/lib/auth';
+import { User } from '@supabase/supabase-js';
+import { Sparkles } from 'lucide-react';
 
 export default function Home() {
   const [isClient, setIsClient] = useState(false);
@@ -64,6 +68,10 @@ export default function Home() {
   const [isDownloadReportModalOpen, setIsDownloadReportModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
+  // Auth state
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
   // Refresh all data from memory store
   const refreshData = useCallback(() => {
     const accs = dataStore.getAccounts();
@@ -85,15 +93,24 @@ export default function Home() {
 
   useEffect(() => {
     setIsClient(true);
-    dataStore.init();
-    refreshData();
+    authService.init();
 
-    // Subscribe to all changes (local, cross-tab, or Supabase realtime)
-    const unsubscribe = dataStore.subscribe(() => {
+    // Subscribe to auth state changes
+    const unsubscribeAuth = authService.subscribe((authState) => {
+      setUser(authState.user);
+      dataStore.setCurrentUser(authState.user ? authState.user.id : null);
       refreshData();
     });
 
-    return () => unsubscribe();
+    // Subscribe to all changes (local, cross-tab, or Supabase realtime)
+    const unsubscribeStore = dataStore.subscribe(() => {
+      refreshData();
+    });
+
+    return () => {
+      unsubscribeAuth();
+      unsubscribeStore();
+    };
   }, [refreshData]);
 
   // Keyboard shortcut listener for rapid entry
@@ -189,10 +206,34 @@ export default function Home() {
         onOpenExportModal={() => setIsExportModalOpen(true)}
         isSyncing={isSyncing}
         onManualSync={handleManualSync}
+        user={user}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onSignOut={() => authService.signOut()}
       />
 
       {/* Main Content Dashboard */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 sm:space-y-8">
+        {/* Guest Mode Notice */}
+        {!user && (
+          <div className="bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/20 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg shadow-emerald-950/20">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 flex-shrink-0">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-white">Local Guest Mode</h4>
+                <p className="text-[11px] text-slate-400">Sign in to sync your personal ledger across all your devices with Supabase Cloud.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsAuthModalOpen(true)}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 shadow-md shadow-emerald-500/20 transition-all cursor-pointer whitespace-nowrap"
+            >
+              Sign In / Register
+            </button>
+          </div>
+        )}
+
         {/* 1. Handy Top Quick Action Bar */}
         <QuickActionBar
           transactionCount={monthTxCount}
@@ -317,6 +358,14 @@ export default function Home() {
         accounts={accounts}
         currentMonth={currentMonth}
         currency={currency}
+      />
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={() => {
+          refreshData();
+        }}
       />
 
       {/* Footer */}

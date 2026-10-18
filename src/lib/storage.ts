@@ -3,7 +3,7 @@ import { DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES, DEFAULT_MONTHLY_BALANCES, DEFAULT
 import { getSupabase } from './supabase';
 import { generateUUID } from './utils';
 
-const STORAGE_KEYS = {
+const LEGACY_STORAGE_KEYS = {
   ACCOUNTS: 'pe_accounts_v2',
   MONTHLY_BALANCES: 'pe_monthly_balances_v2',
   CATEGORIES: 'pe_categories_v2',
@@ -17,10 +17,16 @@ class DataStore {
   private monthlyBalances: MonthlyBalance[] = [];
   private categories: Category[] = [];
   private transactions: Transaction[] = [];
+  private currentUserId: string | null = null;
   private initialized = false;
   private listeners: Set<Listener> = new Set();
   private broadcastChannel: BroadcastChannel | null = null;
   private realtimeSubscribed = false;
+
+  private getStorageKey(type: keyof typeof LEGACY_STORAGE_KEYS): string {
+    const scope = this.currentUserId ? `_${this.currentUserId}` : '_guest';
+    return `pe${scope}_${type.toLowerCase()}_v2`;
+  }
 
   public subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
@@ -37,13 +43,28 @@ class DataStore {
     });
   }
 
-  public init() {
+  public setCurrentUser(userId: string | null) {
+    if (this.currentUserId === userId && this.initialized) return;
+    this.currentUserId = userId;
+    this.syncFromLocal();
+    this.notifySubscribers();
+
+    if (userId) {
+      this.syncFromSupabase();
+      this.setupSupabaseRealtime();
+    }
+  }
+
+  public init(userId?: string | null) {
     if (typeof window === 'undefined') return;
-    if (this.initialized) return;
+    if (userId !== undefined) {
+      this.currentUserId = userId;
+    }
+    if (this.initialized && userId === undefined) return;
 
     try {
       // Setup cross-tab BroadcastChannel
-      if (typeof BroadcastChannel !== 'undefined') {
+      if (typeof BroadcastChannel !== 'undefined' && !this.broadcastChannel) {
         this.broadcastChannel = new BroadcastChannel('finpulse_tab_sync');
         this.broadcastChannel.onmessage = (event) => {
           if (event.data === 'sync_required') {
@@ -53,11 +74,11 @@ class DataStore {
         };
       }
 
-      // 1. Initial quick load from LocalStorage
+      // 1. Initial quick load from user-scoped LocalStorage
       this.syncFromLocal();
       this.initialized = true;
 
-      // 2. Fetch from Supabase and listen for Realtime events
+      // 2. Fetch from Supabase and listen for Realtime events if authenticated or connected
       this.syncFromSupabase();
       this.setupSupabaseRealtime();
     } catch (e) {
@@ -71,26 +92,41 @@ class DataStore {
 
   private syncFromLocal() {
     if (typeof window === 'undefined') return;
-    const storedAcc = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
-    this.accounts = storedAcc ? JSON.parse(storedAcc) : DEFAULT_ACCOUNTS;
 
-    const storedMb = localStorage.getItem(STORAGE_KEYS.MONTHLY_BALANCES);
-    this.monthlyBalances = storedMb ? JSON.parse(storedMb) : DEFAULT_MONTHLY_BALANCES;
+    const accKey = this.getStorageKey('ACCOUNTS');
+    const mbKey = this.getStorageKey('MONTHLY_BALANCES');
+    const catKey = this.getStorageKey('CATEGORIES');
+    const txKey = this.getStorageKey('TRANSACTIONS');
 
-    const storedCat = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+    let storedAcc = localStorage.getItem(accKey);
+    let storedMb = localStorage.getItem(mbKey);
+    let storedCat = localStorage.getItem(catKey);
+    let storedTx = localStorage.getItem(txKey);
+
+    // Migration fallback: If user key is empty, check legacy single-user keys
+    if (!storedAcc && this.currentUserId) {
+      const legacyAcc = localStorage.getItem(LEGACY_STORAGE_KEYS.ACCOUNTS);
+      if (legacyAcc) {
+        storedAcc = legacyAcc;
+        storedMb = localStorage.getItem(LEGACY_STORAGE_KEYS.MONTHLY_BALANCES);
+        storedCat = localStorage.getItem(LEGACY_STORAGE_KEYS.CATEGORIES);
+        storedTx = localStorage.getItem(LEGACY_STORAGE_KEYS.TRANSACTIONS);
+      }
+    }
+
+    this.accounts = storedAcc ? JSON.parse(storedAcc) : (this.currentUserId ? [] : DEFAULT_ACCOUNTS);
+    this.monthlyBalances = storedMb ? JSON.parse(storedMb) : (this.currentUserId ? [] : DEFAULT_MONTHLY_BALANCES);
     this.categories = storedCat ? JSON.parse(storedCat) : DEFAULT_CATEGORIES;
-
-    const storedTx = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
-    this.transactions = storedTx ? JSON.parse(storedTx) : DEFAULT_TRANSACTIONS;
+    this.transactions = storedTx ? JSON.parse(storedTx) : (this.currentUserId ? [] : DEFAULT_TRANSACTIONS);
   }
 
   private saveLocal() {
     if (typeof window === 'undefined') return;
     try {
-      localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(this.accounts));
-      localStorage.setItem(STORAGE_KEYS.MONTHLY_BALANCES, JSON.stringify(this.monthlyBalances));
-      localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(this.categories));
-      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(this.transactions));
+      localStorage.setItem(this.getStorageKey('ACCOUNTS'), JSON.stringify(this.accounts));
+      localStorage.setItem(this.getStorageKey('MONTHLY_BALANCES'), JSON.stringify(this.monthlyBalances));
+      localStorage.setItem(this.getStorageKey('CATEGORIES'), JSON.stringify(this.categories));
+      localStorage.setItem(this.getStorageKey('TRANSACTIONS'), JSON.stringify(this.transactions));
       
       // Notify other tabs
       if (this.broadcastChannel) {
@@ -173,16 +209,28 @@ class DataStore {
 
     try {
       if (this.categories.length > 0) {
-        await supabase.from('categories').upsert(this.categories);
+        const cats = this.currentUserId
+          ? this.categories.map((c) => ({ ...c, user_id: c.user_id || this.currentUserId! }))
+          : this.categories;
+        await supabase.from('categories').upsert(cats);
       }
       if (this.accounts.length > 0) {
-        await supabase.from('accounts').upsert(this.accounts);
+        const accs = this.currentUserId
+          ? this.accounts.map((a) => ({ ...a, user_id: a.user_id || this.currentUserId! }))
+          : this.accounts;
+        await supabase.from('accounts').upsert(accs);
       }
       if (this.monthlyBalances.length > 0) {
-        await supabase.from('monthly_balances').upsert(this.monthlyBalances);
+        const mbs = this.currentUserId
+          ? this.monthlyBalances.map((m) => ({ ...m, user_id: m.user_id || this.currentUserId! }))
+          : this.monthlyBalances;
+        await supabase.from('monthly_balances').upsert(mbs);
       }
       if (this.transactions.length > 0) {
-        await supabase.from('transactions').upsert(this.transactions);
+        const txs = this.currentUserId
+          ? this.transactions.map((t) => ({ ...t, user_id: t.user_id || this.currentUserId! }))
+          : this.transactions;
+        await supabase.from('transactions').upsert(txs);
       }
       return { success: true, message: 'Synced with Supabase successfully!' };
     } catch (err: unknown) {
@@ -219,6 +267,7 @@ class DataStore {
     const newAccount: Account = {
       ...account,
       id: generateUUID(),
+      user_id: this.currentUserId || undefined,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -290,6 +339,7 @@ class DataStore {
         month,
         opening_balance: balance,
         notes,
+        user_id: this.currentUserId || undefined,
         created_at: new Date().toISOString(),
       };
       this.monthlyBalances.push(result);
@@ -312,6 +362,7 @@ class DataStore {
     const newTx: Transaction = {
       ...tx,
       id: generateUUID(),
+      user_id: this.currentUserId || undefined,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };

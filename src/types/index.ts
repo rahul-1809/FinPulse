@@ -7,6 +7,7 @@ export interface Account {
   currency: string;
   color: string;
   initial_balance: number;
+  user_id?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -17,6 +18,7 @@ export interface MonthlyBalance {
   month: string; // 'YYYY-MM'
   opening_balance: number;
   notes?: string;
+  user_id?: string;
   created_at?: string;
 }
 
@@ -30,6 +32,7 @@ export interface Category {
   type: 'EXPENSE' | 'INCOME';
   icon: string;
   color: string;
+  user_id?: string;
 }
 
 export interface Transaction {
@@ -42,6 +45,7 @@ export interface Transaction {
   date: string; // 'YYYY-MM-DD'
   note?: string;
   payment_mode?: PaymentMode;
+  user_id?: string;
   created_at?: string;
   updated_at?: string;
 }
