@@ -78,15 +78,17 @@ class DataStore {
       this.syncFromLocal();
       this.initialized = true;
 
-      // 2. Fetch from Supabase and listen for Realtime events if authenticated or connected
-      this.syncFromSupabase();
-      this.setupSupabaseRealtime();
+      // 2. Fetch from Supabase ONLY if an authenticated user is active
+      if (this.currentUserId) {
+        this.syncFromSupabase();
+        this.setupSupabaseRealtime();
+      }
     } catch (e) {
       console.error('Error initializing DataStore:', e);
-      this.accounts = DEFAULT_ACCOUNTS;
-      this.monthlyBalances = DEFAULT_MONTHLY_BALANCES;
+      this.accounts = [];
+      this.monthlyBalances = [];
       this.categories = DEFAULT_CATEGORIES;
-      this.transactions = DEFAULT_TRANSACTIONS;
+      this.transactions = [];
     }
   }
 
@@ -103,7 +105,7 @@ class DataStore {
     let storedCat = localStorage.getItem(catKey);
     let storedTx = localStorage.getItem(txKey);
 
-    // Migration fallback: If user key is empty, check legacy single-user keys
+    // Migration fallback: If user key is empty and this is the owner signing in, check legacy single-user keys
     if (!storedAcc && this.currentUserId) {
       const legacyAcc = localStorage.getItem(LEGACY_STORAGE_KEYS.ACCOUNTS);
       if (legacyAcc) {
@@ -114,10 +116,10 @@ class DataStore {
       }
     }
 
-    this.accounts = storedAcc ? JSON.parse(storedAcc) : (this.currentUserId ? [] : DEFAULT_ACCOUNTS);
-    this.monthlyBalances = storedMb ? JSON.parse(storedMb) : (this.currentUserId ? [] : DEFAULT_MONTHLY_BALANCES);
+    this.accounts = storedAcc ? JSON.parse(storedAcc) : [];
+    this.monthlyBalances = storedMb ? JSON.parse(storedMb) : [];
     this.categories = storedCat ? JSON.parse(storedCat) : DEFAULT_CATEGORIES;
-    this.transactions = storedTx ? JSON.parse(storedTx) : (this.currentUserId ? [] : DEFAULT_TRANSACTIONS);
+    this.transactions = storedTx ? JSON.parse(storedTx) : [];
   }
 
   private saveLocal() {
@@ -139,7 +141,7 @@ class DataStore {
 
   // --- SUPABASE REALTIME & SYNC ---
   private setupSupabaseRealtime() {
-    if (this.realtimeSubscribed) return;
+    if (this.realtimeSubscribed || !this.currentUserId) return;
     const supabase = getSupabase();
     if (!supabase) return;
 
@@ -158,7 +160,7 @@ class DataStore {
 
   public async syncFromSupabase(): Promise<boolean> {
     const supabase = getSupabase();
-    if (!supabase) return false;
+    if (!supabase || !this.currentUserId) return false;
 
     try {
       const [accRes, mbRes, catRes, txRes] = await Promise.all([
@@ -168,31 +170,21 @@ class DataStore {
         supabase.from('transactions').select('*').order('date', { ascending: false }),
       ]);
 
-      let hasSupabaseData = false;
-
-      if (accRes.data && accRes.data.length > 0) {
+      if (accRes.data) {
         this.accounts = accRes.data;
-        hasSupabaseData = true;
       }
-      if (mbRes.data && mbRes.data.length > 0) {
+      if (mbRes.data) {
         this.monthlyBalances = mbRes.data;
-        hasSupabaseData = true;
       }
       if (catRes.data && catRes.data.length > 0) {
         this.categories = catRes.data;
       }
-      if (txRes.data && txRes.data.length > 0) {
+      if (txRes.data) {
         this.transactions = txRes.data;
-        hasSupabaseData = true;
       }
 
-      // If Supabase database is empty, auto-push initial defaults to cloud
-      if (!hasSupabaseData && accRes.data?.length === 0) {
-        await this.pushLocalToSupabase();
-      } else {
-        this.saveLocal();
-        this.notifySubscribers();
-      }
+      this.saveLocal();
+      this.notifySubscribers();
 
       return true;
     } catch (err) {
@@ -203,8 +195,8 @@ class DataStore {
 
   public async pushLocalToSupabase(): Promise<{ success: boolean; message: string }> {
     const supabase = getSupabase();
-    if (!supabase) {
-      return { success: false, message: 'Supabase credentials not configured.' };
+    if (!supabase || !this.currentUserId) {
+      return { success: false, message: 'Please sign in to sync with Supabase.' };
     }
 
     try {

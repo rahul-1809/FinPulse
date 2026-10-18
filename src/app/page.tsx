@@ -99,6 +99,9 @@ export default function Home() {
     const unsubscribeAuth = authService.subscribe((authState) => {
       setUser(authState.user);
       dataStore.setCurrentUser(authState.user ? authState.user.id : null);
+      if (!authState.loading && !authState.user) {
+        setIsAuthModalOpen(true);
+      }
       refreshData();
     });
 
